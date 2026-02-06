@@ -1,4 +1,4 @@
-name: Build & Publish AMD Strix Halo Toolbox (rocm-7.2-Opt)
+name: Build & Publish AMD Strix Halo Toolbox (rocm-7.2-opt)
 
 on:
   workflow_dispatch:
@@ -6,7 +6,7 @@ on:
 env:
   DOCKERHUB_REPO: docker.io/ragingsheep/amd-strix-halo-toolboxes-optimized
   LOCAL_PREFIX: llama
-  BACKEND: rocm-7.2-Opt
+  BACKEND: rocm-7.2-opt
 
 jobs:
   build-and-push:
@@ -37,7 +37,7 @@ jobs:
       - name: Set build timestamp
         run: echo "BUILD_TS=$(date +%Y%m%dT%H%M%S)" >> $GITHUB_ENV
 
-      - name: Build & push rocm-7.2-Opt
+      - name: Build & push rocm-7.2-opt
         working-directory: toolboxes
         shell: bash
         run: |
