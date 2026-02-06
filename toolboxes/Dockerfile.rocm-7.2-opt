@@ -1,56 +1,49 @@
-# -----------------------------------------------------------------------------
-# AMD Strix Halo Toolbox - ROCm 7.2 Optimized
-# -----------------------------------------------------------------------------
 
-# -----------------------
-# Build Stage (if needed)
-# -----------------------
-FROM registry.fedoraproject.org/fedora:43 AS builder
+~# runtime stage only (no local build required)
+~FROM registry.fedoraproject.org/fedora-minimal:43
+~
+~# ---- ROCm 7.2 repo ----
+~RUN <<'EOF'
+~tee /etc/yum.repos.d/rocm.repo <<REPO
+~[ROCm-7.2]
+~name=ROCm7.2
+~baseurl=https://repo.radeon.com/rocm/rhel10/7.2/main
+~enabled=1
+~priority=50
+~gpgcheck=1
+~gpgkey=https://repo.radeon.com/rocm/rocm.gpg.key
+~REPO
+~EOF
+~
+~# ---- Runtime dependencies ----
+~RUN microdnf -y --nodocs --setopt=install_weak_deps=0 \
+~  install \
+~  bash curl tar ca-certificates \
+~  libatomic libstdc++ libgcc libgomp sudo \
+~  hip-runtime-amd rocblas hipblas \
+~  rocminfo radeontop procps-ng \
+~  && microdnf clean all \
+~  && rm -rf /var/cache/dnf/*
+~
+~# ---- ROCm environment ----
+~ENV ROCM_PATH=/opt/rocm \
+~    HIP_PATH=/opt/rocm \
+~    HIP_CLANG_PATH=/opt/rocm/llvm/bin \
+~    HIP_DEVICE_LIB_PATH=/opt/rocm/amdgcn/bitcode \
+~    PATH=/opt/rocm/bin:/opt/rocm/llvm/bin:/usr/local/bin:$PATH
+~
+~# ---- Fetch latest Strix Halo optimized build ----
+WORKDIR /tmp
 
-# -----------------------
-# ROCm 7.2 Repo
-# -----------------------
-RUN tee /etc/yum.repos.d/rocm.repo <<'EOF'
-[ROCm-7.2]
-name=ROCm7.2
-baseurl=https://repo.radeon.com/rocm/rhel10/7.2/main
-enabled=1
-priority=50
-gpgcheck=1
-gpgkey=https://repo.radeon.com/rocm/rocm.gpg.key
-EOF
-
-# -----------------------
-# Build dependencies
-# -----------------------
-RUN dnf -y --nodocs --setopt=install_weak_deps=False \
-    --exclude='*sdk*' --exclude='*samples*' --exclude='*-doc*' --exclude='*-docs*' \
-    install \
-    make gcc cmake lld clang clang-devel compiler-rt libcurl-devel ninja-build \
-    rocm-llvm rocm-device-libs hip-runtime-amd hip-devel \
-    rocblas rocblas-devel hipblas hipblas-devel rocm-cmake libomp-devel libomp \
-    rocminfo radeontop \
-    git vim sudo rsync curl jq xz tar \
-    && dnf clean all && rm -rf /var/cache/dnf/*
-
-# -----------------------
-# ROCm environment
-# -----------------------
-ENV ROCM_PATH=/opt/rocm \
-    HIP_PATH=/opt/rocm \
-    HIP_CLANG_PATH=/opt/rocm/llvm/bin \
-    HIP_DEVICE_LIB_PATH=/opt/rocm/amdgcn/bitcode \
-    PATH=/opt/rocm/bin:/opt/rocm/llvm/bin:/usr/local/bin:$PATH
-
-# -----------------------
-# Download latest Lychee Strix Halo ROCm 7.2
-# -----------------------
-RUN set -eux; \
+# Install small tools (if not already installed)
+RUN dnf install -y curl jq xz tar && \
+    set -eux; \
     API="https://api.github.com/repos/Lychee-Technology/llama-cpp-for-strix-halo/releases/latest"; \
     JSON=$(curl -fsSL "$API"); \
-    LATEST_URL=$(echo "$JSON" | jq -r '.assets[] | select(.name | test("rocm-7\\.2.*\\.tar\\.xz$")) | .browser_download_url' | head -n1); \
+    # select ROCm 7.2 tar.xz
+    LATEST_URL=$(echo "$JSON" | jq -r '.assets[] | select(.name | test("rocm-7\\.2.*\\.tar\\.xz$")) | .browser_download_url' | head -n 1); \
     if [ -z "$LATEST_URL" ] || [ "$LATEST_URL" = "null" ]; then \
-        echo "No suitable ROCm 7.2 release found!"; \
+        echo "No suitable release asset found!"; \
         echo "$JSON" | jq '.assets[].name'; \
         exit 1; \
     fi; \
@@ -59,50 +52,21 @@ RUN set -eux; \
     tar -xJf /tmp/llama-strix.tar.xz -C /usr/local --strip-components=1; \
     rm -f /tmp/llama-strix.tar.xz
 
-# -----------------------
-# Copy helper script
-# -----------------------
-COPY gguf-vram-estimator.py /usr/local/bin/
-RUN chmod +x /usr/local/bin/gguf-vram-estimator.py
-
-# -----------------------
-# Runtime Stage (minimal)
-# -----------------------
-FROM registry.fedoraproject.org/fedora-minimal:43
-
-# ROCm 7.2 Repo
-RUN tee /etc/yum.repos.d/rocm.repo <<'EOF'
-[ROCm-7.2]
-name=ROCm7.2
-baseurl=https://repo.radeon.com/rocm/rhel10/7.2/main
-enabled=1
-priority=50
-gpgcheck=1
-gpgkey=https://repo.radeon.com/rocm/rocm.gpg.key
-EOF
-
-# Runtime dependencies
-RUN microdnf -y --nodocs --setopt=install_weak_deps=0 \
-    --exclude='*sdk*' --exclude='*samples*' --exclude='*-doc*' --exclude='*-docs*' \
-    install \
-    bash ca-certificates libatomic libstdc++ libgcc libgomp sudo \
-    hip-runtime-amd rocblas hipblas \
-    rocminfo radeontop procps-ng curl xz tar jq \
-    && microdnf clean all && rm -rf /var/cache/dnf/*
-
-# Copy everything from builder
-COPY --from=builder /usr/local/ /usr/local/
-
-# Ensure libraries are registered
-RUN echo "/usr/local/lib" > /etc/ld.so.conf.d/local.conf \
-    && echo "/usr/local/lib64" >> /etc/ld.so.conf.d/local.conf \
-    && ldconfig \
-    && cp -n /usr/local/lib/libllama*.so* /usr/lib64/ 2>/dev/null || true \
-    && ldconfig
-
-# ROCm environment
-RUN printf '%s\n' > /etc/profile.d/rocm.sh && chmod +x /etc/profile.d/rocm.sh \
-    && echo 'source /etc/profile.d/rocm.sh' >> /etc/bashrc
-
-# Default shell
-CMD ["/bin/bash"]
+# Ensure shared libs are discoverable
+RUN echo "/usr/local/lib"  > /etc/ld.so.conf.d/local.conf \
+~ && echo "/usr/local/lib64" >> /etc/ld.so.conf.d/local.conf \
+~ && ldconfig
+~
+~# ---- Helper ----
+~COPY gguf-vram-estimator.py /usr/local/bin/gguf-vram-estimator.py
+~RUN chmod +x /usr/local/bin/gguf-vram-estimator.py
+~
+~# ---- Profile ----
+~RUN printf '%s\n' \
+~  'export ROCM_PATH=/opt/rocm' \
+~  'export HIP_PATH=/opt/rocm' \
+~  > /etc/profile.d/rocm.sh \
+~  && chmod +x /etc/profile.d/rocm.sh \
+~  && echo 'source /etc/profile.d/rocm.sh' >> /etc/bashrc
+~
+~CMD ["/bin/bash"]
