@@ -34,6 +34,9 @@ ENV ROCM_PATH=/opt/rocm \
 # ---- Fetch latest Strix Halo optimized build ----
 WORKDIR /tmp
 
+# install required utilities
+RUN dnf install -y curl jq tar
+
 RUN set -eux; \
   API="https://api.github.com/repos/Lychee-Technology/llama-cpp-for-strix-halo/releases/latest"; \
   JSON=$(curl -fsSL "$API"); \
@@ -46,9 +49,6 @@ RUN set -eux; \
   curl -fsSL "$LATEST_URL" -o llama-strix.tar.gz; \
   tar -xzf llama-strix.tar.gz -C /usr/local; \
   rm -f llama-strix.tar.gz
-
-dnf install -y curl jq tar
-
 
 # Ensure shared libs are discoverable
 RUN echo "/usr/local/lib"  > /etc/ld.so.conf.d/local.conf \
