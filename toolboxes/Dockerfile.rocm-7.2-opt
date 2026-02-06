@@ -35,20 +35,20 @@ ENV ROCM_PATH=/opt/rocm \
 WORKDIR /tmp
 
 # install required utilities
-RUN dnf install -y curl jq tar
-
-RUN set -eux; \
-  API="https://api.github.com/repos/Lychee-Technology/llama-cpp-for-strix-halo/releases/latest"; \
-  JSON=$(curl -fsSL "$API"); \
-  LATEST_URL=$(echo "$JSON" | jq -r '.assets[] | select(.name | test("x86_64.*\\.tar\\.gz$")) | .browser_download_url' | head -n 1); \
-  if [ -z "$LATEST_URL" ] || [ "$LATEST_URL" = "null" ]; then \
-    echo "No suitable release asset found"; \
-    echo "$JSON"; \
-    exit 1; \
-  fi; \
-  curl -fsSL "$LATEST_URL" -o llama-strix.tar.gz; \
-  tar -xzf llama-strix.tar.gz -C /usr/local; \
-  rm -f llama-strix.tar.gz
+RUN dnf install -y curl jq tar && \
+    set -eux; \
+    API="https://api.github.com/repos/Lychee-Technology/llama-cpp-for-strix-halo/releases/latest"; \
+    JSON=$(curl -fsSL "$API"); \
+    LATEST_URL=$(echo "$JSON" | jq -r '.assets[] | select(.name | test("linux.*x86_64.*\\.tar\\.gz")) | .browser_download_url' | head -n 1); \
+    if [ -z "$LATEST_URL" ] || [ "$LATEST_URL" = "null" ]; then \
+        echo "No suitable release asset found!"; \
+        echo "$JSON" | jq '.assets[].name'; \
+        exit 1; \
+    fi; \
+    echo "Downloading $LATEST_URL"; \
+    curl -fsSL "$LATEST_URL" -o /tmp/llama-strix.tar.gz; \
+    tar -xzf /tmp/llama-strix.tar.gz -C /usr/local; \
+    rm -f /tmp/llama-strix.tar.gz
 
 # Ensure shared libs are discoverable
 RUN echo "/usr/local/lib"  > /etc/ld.so.conf.d/local.conf \
