@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 env:
-  DOCKERHUB_REPO: docker.io/ragingsheep/amd-strix-halo-toolboxes-optimised
+  DOCKERHUB_REPO: docker.io/ragingsheep/amd-strix-halo-toolboxes-optimized
   LOCAL_PREFIX: llama
   BACKEND: rocm-7.2-Opt
 
